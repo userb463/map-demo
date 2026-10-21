@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智慧导航地图</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Microsoft YaHei', sans-serif; overflow: hidden; display: flex; height: 100vh; }
+
+    /* 左侧操作栏 */
+    .sidebar {
+      width: 260px; min-width: 260px; height: 100vh;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff; display: flex; flex-direction: column;
+      box-shadow: 2px 0 16px rgba(0,0,0,0.3); z-index: 10;
+    }
+    .sidebar-header {
+      padding: 20px; text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    .sidebar-header h1 { font-size: 18px; font-weight: 600; }
+    .sidebar-header p { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px; }
+
+    .sidebar-body { flex: 1; overflow-y: auto; padding: 12px; }
+
+    /* 分组 */
+    .group { margin-bottom: 8px; }
+    .group-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 14px; border-radius: 8px; cursor: pointer;
+      background: rgba(255,255,255,0.05); transition: all 0.2s;
+    }
+    .group-header:hover { background: rgba(255,255,255,0.1); }
+    .group-header .icon { font-size: 20px; }
+    .group-header .text { flex: 1; }
+    .group-header .text h3 { font-size: 14px; font-weight: 500; }
+    .group-header .text p { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; }
+    .group-header .arrow {
+      font-size: 12px; color: rgba(255,255,255,0.3);
+      transition: transform 0.2s;
+    }
+    .group.open .group-header .arrow { transform: rotate(90deg); }
+    .group.open .group-header { background: rgba(24,144,255,0.2); border: 1px solid rgba(24,144,255,0.3); }
+
+    .group-list {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    }
+    .group.open .group-list { max-height: 600px; }
+
+    .group-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px 10px 42px; border-radius: 6px;
+      cursor: pointer; transition: all 0.2s; font-size: 13px;
+      color: rgba(255,255,255,0.7);
+    }
+    .group-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .group-item.active { background: rgba(24,144,255,0.3); color: #fff; }
+    .group-item .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #1890ff; flex-shrink: 0;
+    }
+    .group-item .city-tag {
+      font-size: 10px; padding: 1px 6px; border-radius: 3px;
+      background: rgba(24,144,255,0.3); color: #69c0ff; margin-left: auto;
+    }
+
+    /* 小红书面板 */
+    .xhs-panel {
+      width: 320px; min-width: 320px; height: 100vh;
+      background: #fff; display: none; flex-direction: column;
+      box-shadow: 2px 0 16px rgba(0,0,0,0.15); z-index: 20;
+      border-right: 1px solid #e8e8e8;
+    }
+    .xhs-panel.open { display: flex; }
+    .xhs-header {
+      padding: 16px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .xhs-header h2 { font-size: 15px; color: #333; display: flex; align-items: center; gap: 8px; }
+    .xhs-header .close-btn {
+      width: 28px; height: 28px; border: none; border-radius: 50%;
+      background: #f5f5f5; cursor: pointer; font-size: 14px; color: #999;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .xhs-header .close-btn:hover { background: #e8e8e8; color: #333; }
+    .xhs-subtitle {
+      padding: 8px 16px; font-size: 12px; color: #999;
+      border-bottom: 1px solid #f5f5f5; background: #fafafa;
+    }
+    .xhs-list {
+      flex: 1; overflow-y: auto; padding: 12px;
+    }
+    .xhs-card {
+      background: #fff; border: 1px solid #f0f0f0; border-radius: 12px;
+      overflow: hidden; margin-bottom: 12px; cursor: pointer;
+      transition: all 0.25s; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .xhs-card:hover {
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      transform: translateY(-2px);
+    }
+    .xhs-card .cover {
+      width: 100%; height: 140px; object-fit: cover; display: block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .xhs-card .cover-text {
+      width: 100%; height: 140px; display: flex; align-items: center;
+      justify-content: center; font-size: 32px;
+    }
+    .xhs-card .card-body { padding: 10px 12px; }
+    .xhs-card .card-title {
+      font-size: 13px; font-weight: 600; color: #333; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; margin-bottom: 8px;
+    }
+    .xhs-card .card-meta {
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .xhs-card .card-author {
+      font-size: 11px; color: #999; display: flex; align-items: center; gap: 6px;
+    }
+    .xhs-card .card-author .avatar {
+      width: 20px; height: 20px; border-radius: 50%; display: inline-flex;
+      align-items: center; justify-content: center; font-size: 10px; color: #fff;
+    }
+    .xhs-card .card-likes {
+      font-size: 11px; color: #999; display: flex; align-items: center; gap: 3px;
+    }
+    .xhs-card .hot-tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 10px; font-weight: 600; margin-left: 4px;
+    }
+    .xhs-card .hot-tag.hot { background: #fff1f0; color: #ff4d4f; }
+    .xhs-card .hot-tag.new { background: #fff7e6; color: #fa8c16; }
+
+    /* 底部工具 */
+    .sidebar-footer {
+      padding: 12px; border-top: 1px solid rgba(255,255,255,0.1);
+    }
+    .tool-btn {
+      width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px; background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.8); font-size: 13px; cursor: pointer;
+      transition: all 0.2s; display: flex; align-items: center;
+      justify-content: center; gap: 6px; margin-bottom: 6px;
+    }
+    .tool-btn:hover { background: rgba(255,255,255,0.1); }
+    .tool-btn.active { background: rgba(255,77,79,0.2); border-color: rgba(255,77,79,0.4); color: #ff7875; }
+
+    /* 右侧地图区域 */
+    .map-area { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+
+    /* 顶部搜索栏 */
+    .top-bar {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      display: flex; align-items: center; gap: 10px; z-index: 100;
+    }
+    .search-box {
+      flex: 1; max-width: 420px; display: flex; gap: 8px;
+      background: rgba(255,255,255,0.95); padding: 8px 12px;
+      border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    }
+    .search-box input {
+      flex: 1; border: none; outline: none; font-size: 14px;
+      background: transparent;
+    }
+    .search-box button {
+      padding: 6px 14px; background: #1890ff; color: #fff;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+
+    /* 地图类型切换 */
+    .map-controls {
+      position: absolute; top: 12px; right: 12px; z-index: 100;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .map-controls button {
+      padding: 8px 12px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 12px;
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+      transition: all 0.2s;
+    }
+    .map-controls button.active { background: #1890ff; color: #fff; }
+    .map-controls button:hover:not(.active) { background: #f0f0f0; }
+
+    /* 信息卡片 */
+    .info-card {
+      position: absolute; bottom: 16px; left: 16px; z-index: 100;
+      background: rgba(255,255,255,0.95); padding: 14px 18px;
+      border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+      font-size: 13px; max-width: 300px; display: none;
+    }
+    .info-card.show { display: block; }
+    .info-card h3 { font-size: 15px; margin-bottom: 4px; color: #333; }
+    .info-card p { color: #666; line-height: 1.5; }
+
+    /* 热力图图例 */
+    .heat-legend {
+      position: absolute; bottom: 16px; right: 16px; z-index: 100;
+      background: rgba(255,255,255,0.95); padding: 12px 16px;
+      border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      font-size: 12px; display: none;
+    }
+    .heat-legend.show { display: block; }
+    .heat-legend .title { font-weight: bold; margin-bottom: 8px; color: #333; }
+    .heat-legend .bar {
+      width: 120px; height: 12px; border-radius: 6px;
+      background: linear-gradient(to right, blue, cyan, lime, yellow, red);
+      margin-bottom: 4px;
+    }
+    .heat-legend .labels { display: flex; justify-content: space-between; color: #999; }
+  </style>
+</head>
+<body>
+
+<!-- 左侧操作栏 -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h1>🗺️ 智慧导航</h1>
+    <p>高校版 · 城市旅游版</p>
+  </div>
+
+  <div class="sidebar-body">
+    <!-- 高校版 -->
+    <div class="group open" id="groupUni">
+      <div class="group-header" onclick="toggleGroup('groupUni')">
+        <span class="icon">🎓</span>
+        <div class="text">
+          <h3>高校版</h3>
+          <p>签约高校导航</p>
+        </div>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="group-list">
+        <div class="group-item" onclick="flyToPlace(113.3527, 23.1567, '华南农业大学', 15)" data-name="华南农业大学">
+          <span class="dot"></span> 华南农业大学
+          <span class="city-tag">广州</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(113.3927, 23.0988, '华南理工大学（五山校区）', 15)" data-name="华南理工大学（五山校区）">
+          <span class="dot"></span> 华南理工大学（五山校区）
+          <span class="city-tag">广州</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(113.3479, 23.1388, '华南师范大学', 15)" data-name="华南师范大学">
+          <span class="dot"></span> 华南师范大学
+          <span class="city-tag">广州</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(113.3428, 23.1336, '暨南大学', 15)" data-name="暨南大学">
+          <span class="dot"></span> 暨南大学
+          <span class="city-tag">广州</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(113.2826, 23.1395, '广东外语外贸大学', 15)" data-name="广东外语外贸大学">
+          <span class="dot"></span> 广东外语外贸大学
+          <span class="city-tag">广州</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(118.0969, 24.5804, '厦门工学院', 15)" data-name="厦门工学院">
+          <span class="dot"></span> 厦门工学院
+          <span class="city-tag">厦门</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(118.0924, 24.5908, '厦门理工学院', 15)" data-name="厦门理工学院">
+          <span class="dot"></span> 厦门理工学院
+          <span class="city-tag">厦门</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 城市旅游版 -->
+    <div class="group" id="groupCity">
+      <div class="group-header" onclick="toggleGroup('groupCity')">
+        <span class="icon">🏙️</span>
+        <div class="text">
+          <h3>城市旅游版</h3>
+          <p>热门城市探索</p>
+        </div>
+        <span class="arrow">▶</span>
+      </div>
+      <div class="group-list">
+        <div class="group-item" onclick="flyToPlace(113.2644, 23.1291, '广州', 12)" data-name="广州">
+          <span class="dot"></span> 广州
+          <span class="city-tag">广东</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(118.6132, 24.8756, '泉州', 12)" data-name="泉州">
+          <span class="dot"></span> 泉州
+          <span class="city-tag">福建</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(118.0894, 24.4798, '厦门', 12)" data-name="厦门">
+          <span class="dot"></span> 厦门
+          <span class="city-tag">福建</span>
+        </div>
+        <div class="group-item" onclick="flyToPlace(119.2965, 26.0742, '福州', 12)" data-name="福州">
+          <span class="dot"></span> 福州
+          <span class="city-tag">福建</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部工具 -->
+  <div class="sidebar-footer">
+    <button class="tool-btn" id="heatBtn" onclick="toggleHeatmap()">🔥 热力图（右键选点）</button>
+    <button class="tool-btn" id="restBtn" onclick="loadRestaurants()">🍽️ 周边热门餐厅</button>
+    <button class="tool-btn" id="addBtn" onclick="toggleAddMode()">📌 添加标记</button>
+  </div>
+</div>
+
+<!-- 小红书笔记面板 -->
+<div class="xhs-panel" id="xhsPanel">
+  <div class="xhs-header">
+    <h2>📕 小红书笔记</h2>
+    <div>
+      <button class="close-btn" onclick="xhsLogin()" title="登录小红书" style="margin-right:6px;font-size:11px;width:auto;padding:0 8px;border-radius:4px;">登录</button>
+      <button class="close-btn" onclick="closeXhsPanel()">✕</button>
+    </div>
+  </div>
+  <div class="xhs-subtitle" id="xhsSubtitle">点击餐厅查看相关笔记</div>
+  <div class="xhs-list" id="xhsList">
+    <!-- 卡片动态生成 -->
+  </div>
+</div>
+
+<!-- 右侧地图 -->
+<div class="map-area">
+  <!-- 搜索栏 -->
+  <div class="top-bar">
+    <div class="search-box">
+      <input id="searchInput" placeholder="搜索地点..." />
+      <button onclick="doSearch()">搜索</button>
+    </div>
+  </div>
+
+  <!-- 气泡提示 -->
+  <div id="hintBubble" style="display:none;position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:200;background:rgba(0,0,0,0.75);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;white-space:nowrap;backdrop-filter:blur(4px);">
+    👆 右键点击地图任意位置，获取附近热力图
+  </div>
+
+  <!-- 地图类型 -->
+  <div class="map-controls">
+    <button class="active" onclick="switchMap('satellite', this)">🛰️ 卫星</button>
+    <button onclick="switchMap('road', this)">🗺️ 标准</button>
+  </div>
+
+  <div id="map"></div>
+
+  <!-- 信息卡片 -->
+  <div class="info-card" id="infoCard">
+    <h3 id="infoTitle"></h3>
+    <p id="infoDesc"></p>
+  </div>
+
+  <!-- 热力图图例 -->
+  <div class="heat-legend" id="heatLegend">
+    <div class="title">POI 热力密度</div>
+    <div class="bar"></div>
+    <div class="labels"><span>稀疏</span><span>密集</span></div>
+    <div class="info" id="heatInfo"></div>
+  </div>
+
+  <!-- 餐厅列表面板 -->
+  <div class="rest-panel" id="restPanel" style="display:none;position:absolute;top:60px;right:12px;width:300px;max-height:calc(100vh - 120px);overflow-y:auto;background:rgba(255,255,255,0.97);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.15);z-index:100;padding:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="font-size:15px;">🍽️ 周边热门餐厅</h3>
+      <button onclick="document.getElementById('restPanel').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="restList"></div>
+  </div>
+</div>
+
+<!-- 高德地图 JS API -->
+<script src="https://webapi.amap.com/maps?v=2.0&key=f710aaebcceb729a979b0fccac4ae980"></script>
+<!-- 公开版配置：在 config.js 里填公开专用的高德 REST key（本地版不需要） -->
+<script src="config.js"></script>
+
+<script>
+// ========== 初始化地图 ==========
+var map = new AMap.Map('map', {
+  zoom: 15,
+  center: [113.3527, 23.1567],  // 默认华南农业大学
+  layers: [new AMap.TileLayer.Satellite(), new AMap.TileLayer.RoadNet()],
+  viewMode: '2D'
+});
+
+var currentMarker = null;
+var heatMap = null;
+var heatEnabled = false;
+var heatMode = false;  // 热力图选点模式
+var addMode = false;
+var restMarkers = [];  // 餐厅标记
+var currentMode = '华南农业大学';  // 当前模式（高校/城市）
+
+// ========== 分组展开/收起 ==========
+function toggleGroup(id) {
+  var el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+// ========== 创建文字标签标记 ==========
+function createLabelMarker(lng, lat, name, onClick) {
+  var marker = new AMap.Marker({
+    position: [lng, lat],
+    content: '<div style="background:#fff;color:#333;padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.2);border:1px solid #eee;transform:translate(-50%,-100%);cursor:pointer;">' + name + '</div>',
+    offset: new AMap.Pixel(0, 0),
+    title: name
+  });
+  if (onClick) {
+    marker.on('click', onClick);
+  }
+  return marker;
+}
+
+// ========== 默认显示的餐厅 ==========
+var defaultRestaurants = [
+  { name: '曹记东北烧烤(长兴路店)', lng: 113.348119, lat: 23.168840, addr: '长兴路24-111铺' },
+  { name: '新一家(长兴路店)', lng: 113.352636, lat: 23.166782, addr: '长兴路68号长兴商业广场3楼' },
+  { name: '京桥料理', lng: 113.354820, lat: 23.150461, addr: '茶山路270号118铺' },
+  { name: '乜料·local泰式食堂(五山店)', lng: 113.337503, lat: 23.156956, addr: '东莞庄路114号餐厅101室' }
+];
+
+function showDefaultRestaurants() {
+  // 清除旧标记
+  for (var i = 0; i < restMarkers.length; i++) {
+    map.remove(restMarkers[i]);
+  }
+  restMarkers = [];
+
+  for (var j = 0; j < defaultRestaurants.length; j++) {
+    (function(r) {
+      var m = createLabelMarker(r.lng, r.lat, r.name, function() {
+        openXhsPanel(r.name);
+      });
+      map.add(m);
+      restMarkers.push(m);
+    })(defaultRestaurants[j]);
+  }
+}
+
+// 页面加载后显示默认餐厅
+showDefaultRestaurants();
+
+// ========== 飞到指定位置 ==========
+function flyToPlace(lng, lat, name, zoom) {
+  map.setZoomAndCenter(zoom || 14, [lng, lat], true);
+  currentMode = name;  // 更新当前模式
+
+  // 移除旧标记
+  if (currentMarker) map.remove(currentMarker);
+
+  // 添加新标记
+  currentMarker = new AMap.Marker({
+    position: [lng, lat],
+    title: name
+  });
+  map.add(currentMarker);
+
+  // 高亮选中项
+  document.querySelectorAll('.group-item').forEach(function(item) {
+    item.classList.remove('active');
+    if (item.getAttribute('data-name') === name) {
+      item.classList.add('active');
+    }
+  });
+
+  // 显示信息卡片
+  var descriptions = {
+    '华南农业大学': '全国重点大学，农业科学进入ESI全球前1%，校园占地8250余亩。',
+    '华南理工大学（五山校区）': '985/211高校，工科实力全国前十，五山校区为主校区，历史悠久。',
+    '华南师范大学': '211高校，心理学全国前三，教育学实力雄厚。',
+    '暨南大学': '211高校，中国第一所华侨高等学府，新闻传播学知名。',
+    '广东外语外贸大学': '语言类名校，外国语言文学全国前列，国际化特色鲜明。',
+    '厦门工学院': '民办本科高校，工科为主，校园环境优美，位于集美区。',
+    '厦门理工学院': '公办本科高校，省市共建，以工科和商科见长，地处集美大学城。',
+    '广州': '千年商都，美食之都。必去：陈家祠、沙面、白云山、广州塔。',
+    '泉州': '海上丝绸之路起点，世界文化遗产城市。必去：开元寺、西街、清源山。',
+    '厦门': '海上花园，文艺之城。必去：鼓浪屿、曾厝垵、南普陀寺。',
+    '福州': '有福之州，温泉之都。必去：三坊七巷、鼓山、西湖公园。'
+  };
+
+  document.getElementById('infoTitle').textContent = '📍 ' + name;
+  document.getElementById('infoDesc').textContent = descriptions[name] || '';
+  document.getElementById('infoCard').classList.add('show');
+
+  // 显示小红书笔记（搜索地点 + 美食推荐）
+  openXhsPanel(name, true);
+}
+
+// ========== 搜索 ==========
+function doSearch() {
+  var query = document.getElementById('searchInput').value.trim();
+  if (!query) return;
+
+  AMap.plugin('AMap.Geocoder', function() {
+    var geocoder = new AMap.Geocoder();
+    geocoder.getLocation(query, function(status, result) {
+      if (status === 'complete' && result.geocodes && result.geocodes.length > 0) {
+        var geo = result.geocodes[0];
+        var lnglat = geo.location;
+        map.setZoomAndCenter(14, lnglat, true);
+
+        if (currentMarker) map.remove(currentMarker);
+        currentMarker = new AMap.Marker({ position: lnglat, title: query });
+        map.add(currentMarker);
+
+        document.getElementById('infoTitle').textContent = '📍 ' + query;
+        document.getElementById('infoDesc').textContent = geo.formattedAddress || '';
+        document.getElementById('infoCard').classList.add('show');
+      } else {
+        alert('未找到该地点');
+      }
+    });
+  });
+}
+
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSearch();
+});
+
+// ========== 地图类型 ==========
+function switchMap(type, btn) {
+  document.querySelectorAll('.map-controls button').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  map.remove(map.getLayers());
+  if (type === 'satellite') {
+    map.add([new AMap.TileLayer.Satellite(), new AMap.TileLayer.RoadNet()]);
+  } else {
+    map.add(new AMap.TileLayer());
+  }
+}
+
+// ========== 部署模式自适应 ==========
+// 本地运行 node server.js：走 /api/* 代理（完整功能，含小红书）。
+// 部署到 GitHub Pages 等纯静态环境：自动降级为高德接口浏览器直连（地图/热力图/餐厅可用，
+// 小红书面板显示提示——它依赖本地已登录的浏览器，静态托管做不到）。
+// 公开版 key 从 config.js 注入（window.AMAP_PUBLIC_REST_KEY）；本地模式不使用它（走 /api/* 代理）
+var AMAP_REST_KEY = (typeof window !== 'undefined' && window.AMAP_PUBLIC_REST_KEY) || '';
+var STATIC_MODE = (typeof location !== 'undefined' && /\.github\.io$/.test(location.hostname));
+
+// 浏览器直连高德：逐页串行 + 400ms 间隔（免费版 ~3 QPS，超限会被静默挂起）
+function directPoi(lng, lat, radius) {
+  if (!AMAP_REST_KEY) {
+    return Promise.resolve({ status: '0', info: '公开版未配置高德 key（config.js）' });
+  }
+  var all = [];
+  var seq = Promise.resolve();
+  [1, 2, 3, 4].forEach(function(p) {
+    seq = seq.then(function() {
+      return fetch('https://restapi.amap.com/v3/place/around?key=' + AMAP_REST_KEY +
+        '&location=' + lng + ',' + lat + '&radius=' + radius + '&offset=25&extensions=base&page=' + p)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.status === '1' && d.pois) { all = all.concat(d.pois); }
+          else { throw new Error(d.info || '高德接口请求失败'); }
+        });
+    }).then(function() { return new Promise(function(r) { setTimeout(r, 400); }); });
+  });
+  return seq.then(function() { return { status: '1', pois: all }; })
+    .catch(function(e) { return { status: '0', info: e.message || '高德接口请求失败，请重试' }; });
+}
+
+function apiPoi(lng, lat, radius) {
+  if (STATIC_MODE) return directPoi(lng, lat, radius);
+  return fetch('/api/poi?lng=' + lng + '&lat=' + lat + '&radius=' + radius)
+    .then(function(res) { return res.json(); })
+    .catch(function() { // 后端不存在（纯静态托管）→ 降级直连
+      STATIC_MODE = true;
+      return directPoi(lng, lat, radius);
+    });
+}
+
+function directRestaurant(lng, lat, radius) {
+  if (!AMAP_REST_KEY) {
+    return Promise.resolve({ status: '0', info: '公开版未配置高德 key（config.js）' });
+  }
+  return fetch('https://restapi.amap.com/v3/place/around?key=' + AMAP_REST_KEY +
+    '&location=' + lng + ',' + lat + '&types=050000&radius=' + radius + '&offset=25&extensions=all')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status === '1' && d.pois) {
+        var rated = d.pois.filter(function(p) {
+          return p.biz_ext && p.biz_ext.rating && p.biz_ext.rating !== '[]';
+        });
+        rated.sort(function(a, b) {
+          return parseFloat(b.biz_ext.rating) - parseFloat(a.biz_ext.rating);
+        });
+        return { status: '1', pois: rated };
+      }
+      return { status: '0', info: d.info || '高德接口请求失败，请重试' };
+    })
+    .catch(function() { return { status: '0', info: '高德接口请求失败，请重试' }; });
+}
+
+function apiRestaurant(lng, lat, radius) {
+  if (STATIC_MODE) return directRestaurant(lng, lat, radius);
+  return fetch('/api/restaurant?lng=' + lng + '&lat=' + lat + '&radius=' + radius)
+    .then(function(res) { return res.json(); })
+    .catch(function() {
+      STATIC_MODE = true;
+      return directRestaurant(lng, lat, radius);
+    });
+}
+
+// ========== 热力图（右键选点模式）==========
+function toggleHeatmap() {
+  if (heatEnabled) {
+    // 关闭热力图
+    if (heatMap) { heatMap.setMap(null); heatMap = null; }
+    heatEnabled = false;
+    heatMode = false;
+    document.getElementById('heatBtn').classList.remove('active');
+    document.getElementById('heatBtn').textContent = '🔥 热力图（右键选点）';
+    document.getElementById('heatLegend').classList.remove('show');
+    document.getElementById('hintBubble').style.display = 'none';
+    return;
+  }
+
+  // 进入选点模式
+  heatMode = true;
+  document.getElementById('heatBtn').classList.add('active');
+  document.getElementById('heatBtn').textContent = '🔥 请右键选点...';
+  document.getElementById('hintBubble').style.display = 'block';
+}
+
+// 右键点击地图 → 加载热力图
+map.on('rightclick', function(e) {
+  if (!heatMode || heatEnabled) return;
+
+  var lng = e.lnglat.getLng();
+  var lat = e.lnglat.getLat();
+
+  // 退出选点模式，开始加载
+  heatMode = false;
+  document.getElementById('hintBubble').style.display = 'none';
+  document.getElementById('heatBtn').textContent = '⏳ 加载中...';
+
+  apiPoi(lng, lat, 2000)
+    .then(function(data) {
+      if (data.status === '1' && data.pois && data.pois.length > 0) {
+        var coords = [];
+        for (var i = 0; i < data.pois.length; i++) {
+          var poi = data.pois[i];
+          if (poi.location) {
+            var loc = poi.location.split(',');
+            coords.push({ lng: parseFloat(loc[0]), lat: parseFloat(loc[1]) });
+          }
+        }
+
+        var heatData = [];
+        for (var j = 0; j < coords.length; j++) {
+          var neighbors = 0;
+          for (var k = 0; k < coords.length; k++) {
+            if (j === k) continue;
+            var dLng = (coords[j].lng - coords[k].lng) * 111000 * Math.cos(coords[j].lat * Math.PI / 180);
+            var dLat = (coords[j].lat - coords[k].lat) * 111000;
+            if (Math.sqrt(dLng * dLng + dLat * dLat) < 300) neighbors++;
+          }
+          heatData.push({ lng: coords[j].lng, lat: coords[j].lat, count: Math.min(100, (neighbors + 1) * 20) });
+        }
+
+        AMap.plugin('AMap.HeatMap', function() {
+          if (heatMap) heatMap.setMap(null);
+          var zoom = map.getZoom();
+          heatMap = new AMap.HeatMap(map, {
+            radius: Math.max(25, Math.min(100, Math.round(zoom * 6))),
+            opacity: [0, 0.8],
+            gradient: { 0.2: 'blue', 0.4: 'cyan', 0.6: 'lime', 0.8: 'yellow', 1.0: 'red' }
+          });
+          heatMap.setDataSet({ data: heatData, max: 100 });
+          heatEnabled = true;
+          document.getElementById('heatBtn').textContent = '🔥 关闭热力图';
+          document.getElementById('heatLegend').classList.add('show');
+          document.getElementById('heatInfo').textContent = coords.length + ' 个兴趣点';
+        });
+      } else if (data.status !== '1') {
+        // 接口失败 ≠ 无数据：如实提示，并保持选点模式，直接再右键即可重试
+        document.getElementById('heatBtn').textContent = '🔥 加载失败，请右键重试';
+        document.getElementById('heatInfo').textContent = data.info || '加载失败，请重试';
+        document.getElementById('heatLegend').classList.add('show');
+        heatMode = true;
+      } else {
+        document.getElementById('heatBtn').textContent = '🔥 此处无数据，可右键换一处';
+        document.getElementById('heatInfo').textContent = '当前区域无数据';
+        document.getElementById('heatLegend').classList.add('show');
+        heatMode = true;
+      }
+    })
+    .catch(function() {
+      document.getElementById('heatBtn').textContent = '🔥 加载失败，请右键重试';
+      heatMode = true;
+    });
+});
+
+// 阻止右键菜单
+map.on('rightclick', function(e) {
+  e.originEvent && e.originEvent.preventDefault && e.originEvent.preventDefault();
+});
+
+// ========== 小红书笔记面板 ==========
+function openXhsPanel(searchName, isPlace) {
+  var panel = document.getElementById('xhsPanel');
+  var subtitle = document.getElementById('xhsSubtitle');
+  var list = document.getElementById('xhsList');
+
+  // 记住本次搜索，登录成功后可自动重试
+  lastXhsSearch = { name: searchName, isPlace: isPlace };
+
+  var keyword;
+  if (isPlace) {
+    keyword = searchName + ' 美食推荐';
+  } else {
+    keyword = searchName + ' ' + currentMode;
+  }
+
+  // 公开静态版：没有本地登录环境，直接给出说明 + 外链，不发请求
+  if (STATIC_MODE) {
+    subtitle.innerHTML = '🔍 小红书笔记（本地版功能）';
+    list.innerHTML = '<div style="text-align:center;padding:30px 12px;">' +
+      '<p style="color:#666;margin-bottom:8px;">公开版暂不支持小红书搜索</p>' +
+      '<p style="color:#999;font-size:12px;margin-bottom:14px;">该功能需要在本地运行 <code>node server.js</code> 并登录小红书后使用</p>' +
+      '<a href="https://www.xiaohongshu.com/search_result?keyword=' + encodeURIComponent(keyword) + '&source=web_search_result_notes" target="_blank" style="color:#1890ff;text-decoration:none;">先去小红书搜「' + keyword + '」→</a>' +
+      '</div>';
+    panel.classList.add('open');
+    return;
+  }
+
+  subtitle.innerHTML = '🔍 搜索：「' + keyword + '」加载中...';
+  list.innerHTML = '<div style="text-align:center;padding:40px 0;color:#999;">⏳ 正在搜索小红书笔记...</div>';
+  panel.classList.add('open');
+
+  // 调用后端 API 获取真实小红书数据
+  fetch('/api/xhs?keyword=' + encodeURIComponent(keyword))
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.status === '1' && data.notes && data.notes.length > 0) {
+        subtitle.innerHTML = '🔍 搜索：「' + keyword + '」按热度排序 · 共' + data.total + '条';
+
+        var html = '';
+        var jumpUrl = data.searchUrl || ('https://www.xiaohongshu.com/search_result?keyword=' + encodeURIComponent(keyword) + '&source=web_search_result_notes');
+        for (var i = 0; i < data.notes.length; i++) {
+          var n = data.notes[i];
+          var hotClass = i === 0 ? 'hot' : (i < 3 ? 'new' : '');
+          var hotText = i === 0 ? '🔥最热' : (i < 3 ? '📈高热' : '');
+          // 优先开本地预览页（服务器用登录态抓内容渲染，手机/电脑都能看，不受 App 跳转影响）
+          var noteUrl = n.id
+            ? ('/note.html?id=' + encodeURIComponent(n.id) + (n.token ? '&token=' + encodeURIComponent(n.token) : ''))
+            : (n.url || jumpUrl);
+
+          html += '<div class="xhs-card" onclick="window.open(\'' + noteUrl + '\',\'_blank\')">' +
+            (n.cover ? '<img class="cover" src="' + n.cover + '" alt="" onerror="this.style.display=\'none\'">' : '<div class="cover-text" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);">📕</div>') +
+            '<div class="card-body">' +
+            '<div class="card-title">' + (n.title || '小红书笔记') + (hotText ? '<span class="hot-tag ' + hotClass + '">' + hotText + '</span>' : '') + '</div>' +
+            '<div class="card-meta">' +
+            '<div class="card-author"><span class="avatar" style="background:#ff6b6b;">' + (n.author ? n.author[0] : '红') + '</span>' + (n.author || '小红书') + '</div>' +
+            '<div class="card-likes">❤️ ' + n.likes + '</div>' +
+            '</div></div></div>';
+        }
+        list.innerHTML = html;
+      } else if (data.needLogin) {
+        subtitle.innerHTML = '🔍 需要登录小红书';
+        list.innerHTML = '<div style="text-align:center;padding:40px 10px;">' +
+          '<p style="color:#666;margin-bottom:14px;">登录后才能查看搜索结果</p>' +
+          '<button onclick="xhsLogin()" style="background:#ff2442;color:#fff;border:none;padding:10px 26px;border-radius:20px;font-size:14px;cursor:pointer;">登录小红书</button>' +
+          '</div>';
+      } else {
+        subtitle.innerHTML = '🔍 搜索：「' + keyword + '」';
+        list.innerHTML = '<div style="text-align:center;padding:40px 0;">' +
+          '<p style="color:#999;margin-bottom:12px;">' + (data.info || '未找到相关笔记') + '</p>' +
+          '<a href="https://www.xiaohongshu.com/search_result?keyword=' + encodeURIComponent(keyword) + '&source=web_search_result_notes" target="_blank" style="color:#1890ff;text-decoration:none;">去小红书搜索 →</a>' +
+          '</div>';
+      }
+    })
+    .catch(function() {
+      subtitle.innerHTML = '🔍 搜索：「' + keyword + '」';
+      list.innerHTML = '<div style="text-align:center;padding:40px 0;">' +
+        '<p style="color:#999;margin-bottom:12px;">搜索失败，请稍后重试</p>' +
+        '<a href="https://www.xiaohongshu.com/search_result?keyword=' + encodeURIComponent(keyword) + '&source=web_search_result_notes" target="_blank" style="color:#1890ff;text-decoration:none;">去小红书搜索 →</a>' +
+        '</div>';
+    });
+}
+
+function closeXhsPanel() {
+  document.getElementById('xhsPanel').classList.remove('open');
+}
+
+// 记住最近一次搜索，登录成功后自动重新搜索
+var lastXhsSearch = null;
+
+function xhsLogin() {
+  var btn = event && event.target;
+  if (btn && btn.tagName === 'BUTTON') {
+    btn.disabled = true;
+    btn.textContent = '等待登录...（最长5分钟）';
+  }
+  fetch('/api/xhs/login')
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.status === '1') {
+        // 登录成功，自动重新执行上次搜索
+        if (lastXhsSearch) {
+          openXhsPanel(lastXhsSearch.name, lastXhsSearch.isPlace);
+        } else {
+          alert('小红书登录成功！');
+        }
+      } else {
+        alert('登录失败：' + data.info);
+        if (btn) { btn.disabled = false; btn.textContent = '登录小红书'; }
+      }
+    })
+    .catch(function() {
+      alert('登录请求失败');
+      if (btn) { btn.disabled = false; btn.textContent = '登录小红书'; }
+    });
+}
+
+// ========== 周边热门餐厅 ==========
+function loadRestaurants() {
+  var center = map.getCenter();
+  var btn = document.getElementById('restBtn');
+  btn.textContent = '⏳ 加载中...';
+
+  apiRestaurant(center.getLng(), center.getLat(), 2000)
+    .then(function(data) {
+      btn.textContent = '🍽️ 周边热门餐厅';
+      var panel = document.getElementById('restPanel');
+      var list = document.getElementById('restList');
+
+      if (data.status === '1' && data.pois && data.pois.length > 0) {
+        var html = '';
+        var pois = data.pois.slice(0, 15);
+
+        for (var i = 0; i < pois.length; i++) {
+          var p = pois[i];
+          var ext = p.biz_ext || {};
+          var rating = ext.rating || '-';
+          var cost = ext.cost || '-';
+          var name = p.name || '';
+          var addr = p.address || '';
+          var loc = p.location || '';
+
+          var rColor = '#999';
+          if (rating !== '-') {
+            var r = parseFloat(rating);
+            if (r >= 4.5) rColor = '#ff4d4f';
+            else if (r >= 4.0) rColor = '#fa8c16';
+            else if (r >= 3.5) rColor = '#fadb14';
+            else rColor = '#999';
+          }
+
+          html += '<div onclick="flyToRest(\'' + loc + '\',\'' + name + '\')" style="padding:10px;border:1px solid #f0f0f0;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor=\'#1890ff\';this.style.background=\'#f6f9ff\'" onmouseout="this.style.borderColor=\'#f0f0f0\';this.style.background=\'transparent\'">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<span style="font-size:13px;font-weight:600;color:#333;">' + (i + 1) + '. ' + name + '</span>' +
+            '<span style="font-size:12px;padding:2px 8px;border-radius:4px;background:' + rColor + ';color:#fff;">' + rating + '分</span>' +
+            '</div>' +
+            '<div style="font-size:11px;color:#999;margin-top:4px;">人均 ¥' + cost + ' · ' + addr.substring(0, 20) + '</div>' +
+            '</div>';
+        }
+
+        list.innerHTML = html;
+        panel.style.display = 'block';
+      } else {
+        list.innerHTML = '<p style="color:#999;text-align:center;">当前区域无餐厅数据</p>';
+        panel.style.display = 'block';
+      }
+    })
+    .catch(function() {
+      btn.textContent = '🍽️ 周边热门餐厅';
+      alert('请求失败');
+    });
+}
+
+function flyToRest(loc, name) {
+  if (!loc) return;
+  var parts = loc.split(',');
+  if (parts.length !== 2) return;
+  var lng = parseFloat(parts[0]);
+  var lat = parseFloat(parts[1]);
+  map.setZoomAndCenter(17, [lng, lat], true);
+
+  if (currentMarker) map.remove(currentMarker);
+  currentMarker = createLabelMarker(lng, lat, name);
+  map.add(currentMarker);
+
+  // 打开小红书面板
+  openXhsPanel(name);
+}
+
+// ========== 添加标记 ==========
+function toggleAddMode() {
+  addMode = !addMode;
+  document.getElementById('addBtn').classList.toggle('active', addMode);
+}
+
+map.on('click', function(e) {
+  if (!addMode) return;
+  var name = prompt('标记名称：');
+  if (!name) return;
+  var marker = createLabelMarker(e.lnglat.getLng(), e.lnglat.getLat(), name);
+  map.add(marker);
+  addMode = false;
+  document.getElementById('addBtn').classList.remove('active');
+});
+</script>
+</body>
+</html>

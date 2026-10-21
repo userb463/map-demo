@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小红书笔记预览</title>
+<style>
+  body { margin:0; font-family:-apple-system,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:#f5f5f7; color:#333; }
+  .wrap { max-width:680px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .author { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .author img { width:40px; height:40px; border-radius:50%; object-fit:cover; }
+  .author .name { font-weight:600; }
+  h1 { font-size:18px; margin:0 0 10px; line-height:1.4; }
+  .meta { color:#999; font-size:13px; margin-bottom:12px; }
+  .content { white-space:pre-wrap; line-height:1.7; font-size:15px; margin-bottom:14px; word-break:break-word; }
+  .imgs { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; margin-bottom:6px; }
+  .imgs img { width:100%; border-radius:8px; display:block; }
+  .actions { margin-top:16px; display:flex; gap:10px; }
+  .btn { flex:1; text-align:center; padding:12px 0; border-radius:24px; font-size:15px; text-decoration:none; box-sizing:border-box; }
+  .btn.primary { background:#ff2442; color:#fff; }
+  .btn.ghost { background:#fff; color:#333; border:1px solid #ddd; }
+  .loading { text-align:center; color:#999; padding:60px 0; }
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card" id="box"><div class="loading">⏳ 加载笔记中...</div></div></div>
+<script>
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+var qs = new URLSearchParams(location.search);
+var noteId = qs.get('id') || '';
+var noteToken = qs.get('token') || '';
+var box = document.getElementById('box');
+
+if (!noteId) {
+  box.innerHTML = '<div class="loading">缺少笔记 id</div>';
+} else {
+  fetch('/api/note?id=' + encodeURIComponent(noteId) + (noteToken ? '&token=' + encodeURIComponent(noteToken) : ''))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.status !== '1' || !d.note) {
+        box.innerHTML = '<div class="loading">' + esc(d.info || '加载失败') +
+          '<div style="margin-top:14px;"><a href="https://www.xiaohongshu.com/search_result?keyword=&source=web_search_result_notes" target="_blank" style="color:#1890ff;">去小红书搜索 →</a></div></div>';
+        return;
+      }
+      var n = d.note;
+      var imgs = (n.images || []).map(function(u) {
+        return '<img src="/api/img?u=' + encodeURIComponent(u) + '" alt="" loading="lazy">';
+      }).join('');
+      var searchKw = (n.title || '').split(/[，。！？、\s]/)[0] || '小红书';
+
+      // 官方"在小红书打开"机制（从官网按钮扒出来的）：
+      // xhsdiscover://item/{id}?open_url=/discovery/item/{id}?xsec_token=...
+      // 再经 oia 网关跳转：装了 App 直达该帖，没装引导下载
+      var openPath = '/discovery/item/' + noteId + (noteToken ? '?xsec_token=' + encodeURIComponent(noteToken) + '&xsec_source=pc_search' : '');
+      var scheme = (n.type === 'video' ? 'xhsdiscover://video_feed/' : 'xhsdiscover://item/') + noteId +
+        '?open_url=' + encodeURIComponent(openPath) + '&launch_from=h5_note_detail&source=h5_note_detail';
+      var appOpenUrl = 'https://oia.xiaohongshu.com/oia?deeplink=' + encodeURIComponent(scheme) +
+        '&autoJumpAppStore=true&source=h5_note_detail';
+      var webOpenUrl = 'https://www.xiaohongshu.com' + openPath;
+      var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+      box.innerHTML =
+        '<div class="author">' +
+          (n.avatar ? '<img src="/api/img?u=' + encodeURIComponent(n.avatar) + '" alt="">' : '') +
+          '<div><div class="name">' + esc(n.author || '小红书用户') + '</div>' +
+          (n.time ? '<div class="meta">' + esc(n.time) + '</div>' : '') + '</div>' +
+        '</div>' +
+        '<h1>' + esc(n.title || '无标题') + '</h1>' +
+        '<div class="meta">❤️ ' + esc(n.likes) + '　⭐ ' + esc(n.collects) + '　💬 ' + esc(n.comments) + '</div>' +
+        '<div class="content">' + esc(n.content) + '</div>' +
+        (imgs ? '<div class="imgs">' + imgs + '</div>' : '') +
+        '<div class="actions">' +
+          '<a class="btn primary" href="' + (isMobile ? appOpenUrl : webOpenUrl) + '"' + (isMobile ? '' : ' target="_blank"') + '>在小红书打开</a>' +
+          '<a class="btn ghost" href="https://www.xiaohongshu.com/search_result?keyword=' + encodeURIComponent(searchKw) + '&source=web_search_result_notes" target="_blank">搜同款</a>' +
+        '</div>';
+    })
+    .catch(function(e) {
+      box.innerHTML = '<div class="loading">加载失败：' + esc(e.message) + '</div>';
+    });
+}
+</script>
+</body>
+</html>
