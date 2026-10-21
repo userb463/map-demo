@@ -533,6 +533,27 @@ function switchMap(type, btn) {
 // 小红书面板显示提示——它依赖本地已登录的浏览器，静态托管做不到）。
 // 公开版 key 从 config.js 注入（window.AMAP_PUBLIC_REST_KEY）；本地模式不使用它（走 /api/* 代理）
 var AMAP_REST_KEY = (typeof window !== 'undefined' && window.AMAP_PUBLIC_REST_KEY) || '';
+
+// ---- 公开版配额闸门：每浏览器每日 2000 次直连高德上限，本地日期零点自动重置 ----
+// 注：这是浏览器端计数（localStorage），能拦误跑飞的循环和普通访客超量使用；
+// 拿脚本恶意刷的拦不住（清缓存即可绕过），真要硬限额需要服务端代理。
+var QUOTA_DAILY_LIMIT = 2000;
+var QUOTA_MSG = '今日访问量已达上限（2000次/日，次日自动重置），请稍后再来~';
+function quotaSpend() {
+  try {
+    var d = new Date();
+    var today = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+    var q = { date: today, used: 0 };
+    var raw = localStorage.getItem('amapQuota');
+    if (raw) {
+      try { var p = JSON.parse(raw); if (p && p.date === today) q = p; } catch (e) {}
+    }
+    if (q.used >= QUOTA_DAILY_LIMIT) return false;
+    q.used += 1;
+    localStorage.setItem('amapQuota', JSON.stringify(q));
+    return true;
+  } catch (e) { return true; } // localStorage 不可用时放行
+}
 var STATIC_MODE = (typeof location !== 'undefined' && /\.github\.io$/.test(location.hostname));
 
 // 浏览器直连高德：逐页串行 + 400ms 间隔（免费版 ~3 QPS，超限会被静默挂起）
@@ -544,6 +565,7 @@ function directPoi(lng, lat, radius) {
   var seq = Promise.resolve();
   [1, 2, 3, 4].forEach(function(p) {
     seq = seq.then(function() {
+      if (!quotaSpend()) throw new Error(QUOTA_MSG);
       return fetch('https://restapi.amap.com/v3/place/around?key=' + AMAP_REST_KEY +
         '&location=' + lng + ',' + lat + '&radius=' + radius + '&offset=25&extensions=base&page=' + p)
         .then(function(r) { return r.json(); })
@@ -570,6 +592,9 @@ function apiPoi(lng, lat, radius) {
 function directRestaurant(lng, lat, radius) {
   if (!AMAP_REST_KEY) {
     return Promise.resolve({ status: '0', info: '公开版未配置高德 key（config.js）' });
+  }
+  if (!quotaSpend()) {
+    return Promise.resolve({ status: '0', info: QUOTA_MSG });
   }
   return fetch('https://restapi.amap.com/v3/place/around?key=' + AMAP_REST_KEY +
     '&location=' + lng + ',' + lat + '&types=050000&radius=' + radius + '&offset=25&extensions=all')
